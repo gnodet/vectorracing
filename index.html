@@ -61,20 +61,78 @@
   <canvas id="cv" width="1200" height="800"></canvas>
 </div>
 <script>
-const rnd=(a=1)=>Math.random()*a;const TAU=Math.PI*2
-const cv=document.getElementById('cv'), ctx=cv.getContext('2d')
-const off=document.createElement('canvas'), octx=off.getContext('2d')
-let CELL=9, TRACK_W=24, VMAX=5
-const COLORS=['#72f1b8','#6cf','#ff7cc8','#ffd173']
-let state
-function initNames(n){const names=document.getElementById('names');names.innerHTML='';for(let i=0;i<n;i++){const el=document.createElement('label');el.innerHTML=`Joueur ${i+1}: <input type="text" value="J${i+1}" data-i="${i}">`;names.appendChild(el)}names.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',()=>{if(state) state.players[inp.dataset.i|0].name=inp.value}))}
-function polyCircle(n=240,base=270,wobble=60){const pts=[];let a1=rnd(TAU),a2=rnd(TAU),a3=rnd(TAU)
-  for(let i=0;i<n;i++){const t=i/n,ang=t*TAU
-    const r=base + wobble*(.45*Math.sin(3*ang+a1)+.28*Math.sin(5*ang+a2)+.18*Math.sin(7*ang+a3))
-    pts.push({x:cv.width/2 + r*Math.cos(ang), y:cv.height/2 + r*Math.sin(ang)})}
-  // smooth
-  for(let k=0;k<2;k++) for(let i=0;i<n;i++){const p=pts[i], p1=pts[(i+1)%n], p_1=pts[(i-1+n)%n];p.x=(p_.1?.x:0);}
+// VectorTrack — single-file vector racing
+const rnd=(a=1)=>Math.random()*a, TAU=Math.PI*2;
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const off=document.createElement('canvas'), octx=off.getContext('2d');
+let CELL=9, TRACK_W=24, VMAX=5, GW, GH; const COLORS=['#72f1b8','#6cf','#ff7cc8','#ffd173'];
+let state=null; const $=id=>document.getElementById(id); const info=$('info');
+function initNames(n){const names=$('names');names.innerHTML='';for(let i=0;i<n;i++){const el=document.createElement('label');el.innerHTML=`Joueur ${i+1}: <input type="text" value="J${i+1}" data-i="${i}">`;names.appendChild(el)}names.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',()=>{if(state) state.players[inp.dataset.i|0].name=inp.value}))}
+// --- Geometry helpers
+const toPx=([gx,gy])=>({x:gx*CELL+CELL/2,y:gy*CELL+CELL/2});
+const toGrid=({x,y})=>[Math.round((x-CELL/2)/CELL),Math.round((y-CELL/2)/CELL)];
+function segInt(a,b,c,d){const den=(b.x-a.x)*(d.y-c.y)-(b.y-a.y)*(d.x-c.x); if(Math.abs(den)<1e-9) return false; const ua=((d.x-c.x)*(a.y-c.y)-(d.y-c.y)*(a.x-c.x))/den; const ub=((b.x-a.x)*(a.y-c.y)-(b.y-a.y)*(a.x-c.x))/den; return ua>=0&&ua<=1&&ub>=0&&ub<=1}
+// --- Track generation
+function smooth(pts,passes=2){let a=pts.slice();for(let k=0;k<passes;k++){const b=[];for(let i=0;i<a.length;i++){const p0=a[(i-1+a.length)%a.length],p=a[i],p1=a[(i+1)%a.length];b.push({x:(p0.x+2*p.x+p1.x)/4,y:(p0.y+2*p.y+p1.y)/4})}a=b}return a}
+function polyCircle(n=240,base=270,wobble=60){const pts=[];let a1=rnd(TAU),a2=rnd(TAU),a3=rnd(TAU);for(let i=0;i<n;i++){const t=i/n,ang=t*TAU;const r=base+wobble*(.45*Math.sin(3*ang+a1)+.28*Math.sin(5*ang+a2)+.18*Math.sin(7*ang+a3));pts.push({x:cv.width/2+r*Math.cos(ang),y:cv.height/2+r*Math.sin(ang)})}return smooth(pts,2)}
+function offsetPolyline(ctr,w){const n=ctr.length,hw=w/2,inn=[],out=[];for(let i=0;i<n;i++){const p0=ctr[(i-1+n)%n],p=ctr[i],p1=ctr[(i+1)%n];const tx=p1.x-p0.x,ty=p1.y-p0.y;const L=Math.hypot(tx,ty)||1;const nx=-ty/L,ny=tx/L;inn.push({x:p.x-nx*hw,y:p.y-ny*hw});out.push({x:p.x+nx*hw,y:p.y+ny*hw})}return {inn,out}}
+function buildTrack(){GW=Math.floor(cv.width/CELL);GH=Math.floor(cv.height/CELL);off.width=cv.width;off.height=cv.height;octx.clearRect(0,0,off.width,off.height);
+  const center=polyCircle(240,Math.min(cv.width,cv.height)*0.33,60);const {inn,out}=offsetPolyline(center,TRACK_W);
+  const pathOuter=new Path2D(), pathInner=new Path2D(); pathOuter.moveTo(out[0].x,out[0].y);for(let i=1;i<out.length;i++)pathOuter.lineTo(out[i].x,out[i].y);pathOuter.closePath();pathInner.moveTo(inn[0].x,inn[0].y);for(let i=1;i<inn.length;i++)pathInner.lineTo(inn[i].x,inn[i].y);pathInner.closePath();
+  octx.fillStyle='#0e1130';octx.fillRect(0,0,off.width,off.height);octx.save();octx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--track')||'#20244d';octx.fill(pathOuter);octx.globalCompositeOperation='destination-out';octx.fill(pathInner);octx.restore();
+  // Gates: start gate A is the right-most point, B opposite
+  let sIdx=0;for(let i=1;i<center.length;i++) if(center[i].x>center[sIdx].x) sIdx=i; const oA=out[sIdx], iA=inn[sIdx]; const s2=(sIdx+Math.floor(center.length/2))%center.length; const oB=out[s2], iB=inn[s2];
+  // Grid mask from alpha channel
+  const img=octx.getImageData(0,0,off.width,off.height).data;const inside=Array.from({length:GW},()=>Array(GH).fill(false));
+  for(let gx=0;gx<GW;gx++) for(let gy=0;gy<GH;gy++){const p=toPx([gx,gy]);const idx=((p.y|0)*off.width+(p.x|0))*4+3;inside[gx][gy]=img[idx]>0}
+  const gateA={a:iA,b:oA}, gateB={a:iB,b:oB}; return {center,inn,out,inside,gateA,gateB}
 }
+// --- Game state
+function newGame(){const n=+$('players').value|0;CELL=+$('cell').value|0;TRACK_W=+$('width').value|0;VMAX=+$('vmax').value|0;const track=buildTrack();
+  const players=[];for(let i=0;i<n;i++){const t=(i+1)/(n+1);const sx=track.gateA.a.x*(1-t)+track.gateA.b.x*t, sy=track.gateA.a.y*(1-t)+track.gateA.b.y*t;let [gx,gy]=toGrid({x:sx,y:sy});
+    for(const [dx,dy] of [[0,0],[1,0],[0,1],[-1,0],[0,-1]]){if(track.inside[gx+dx]?.[gy+dy]){gx+=dx;gy+=dy;break}}
+    players.push({name:`J${i+1}`,color:COLORS[i%COLORS.length],pos:[gx,gy],vel:[0,0],trail:[[gx,gy]],done:false,crashed:false,passedB:false})}
+  document.querySelectorAll('#names input').forEach((inp,i)=>players[i]&&(players[i].name=inp.value||players[i].name));
+  state={track,players,turn:0,hover:[0,0],cands:[],opt:null}; recomputeCandidates(); draw();
+}
+// --- Movement and rules
+const inBounds=(x,y)=>x>=0&&y>=0&&x<GW&&y<GH; const inTrack=(x,y)=>inBounds(x,y)&&state.track.inside[x][y];
+function bresenham(a,b,fn){let [x0,y0]=a,[x1,y1]=b;let dx=Math.abs(x1-x0),sx=x0<x1?1:-1,dy=-Math.abs(y1-y0),sy=y0<y1?1:-1,err=dx+dy;for(;;){if(fn(x0,y0)===false) return false;if(x0===x1&&y0===y1)break;const e2=2*err;if(e2>=dy){err+=dy;x0+=sx}if(e2<=dx){err+=dx;y0+=sy}}return true}
+function moveValid(p,v){const nx=p[0]+v[0], ny=p[1]+v[1]; if(!inBounds(nx,ny)) return false; return bresenham(p,[nx,ny],(x,y)=>inTrack(x,y))}
+function recomputeCandidates(){const pl=state.players[state.turn];const [px,py]=pl.pos,[vx,vy]=pl.vel;const C=[];for(let ax=-1;ax<=1;ax++)for(let ay=-1;ay<=1;ay++){const nv=[vx+ax,vy+ay];if(Math.hypot(nv[0],nv[1])>VMAX){C.push({ax,ay,ok:false});continue}const ok=moveValid([px,py],nv);C.push({ax,ay,ok})}state.cands=C}
+function applyAccel(ax,ay){const pl=state.players[state.turn];const [px,py]=pl.pos,[vx,vy]=pl.vel;const nv=[vx+ax,vy+ay];if(Math.hypot(...nv)>VMAX||!moveValid([px,py],nv)) return;const np=[px+nv[0],py+nv[1]];pl.pos=np;pl.vel=nv;pl.trail.push(np);
+  const A=state.track.gateA,B=state.track.gateB;const p0=toPx([px,py]),p1=toPx(np);
+  if(segInt(p0,p1,B.a,B.b)) pl.passedB=true; const won=pl.passedB && segInt(p0,p1,A.a,A.b);
+  if(won){pl.done=true; info.textContent=`${pl.name} a gagné !`}
+  state.turn=(state.turn+1)%state.players.length; state.opt=null; recomputeCandidates(); draw();
+}
+// --- Solver (BFS shortest path with vmax and track constraints)
+function solveOptimal(){const tr=state.track;const start=state.players[0];const s=[...start.pos,0,0,0]; // x,y,vx,vy,b
+  const key=(x,y,vx,vy,b)=>x+','+y+','+vx+','+vy+','+b; const Q=[s],prev=new Map();const vis=new Set([key(...s)]);
+  let goal=null,steps=0;while(Q.length){const [x,y,vx,vy,b]=Q.shift();steps++;if(steps>300000) break;for(let ax=-1;ax<=1;ax++)for(let ay=-1;ay<=1;ay++){const nvx=vx+ax,nvy=vy+ay;if(Math.hypot(nvx,nvy)>VMAX) continue;const nx=x+nvx,ny=y+nvy;if(!inBounds(nx,ny)) continue; if(!bresenham([x,y],[nx,ny],(gx,gy)=>tr.inside[gx][gy])) continue; const p0=toPx([x,y]),p1=toPx([nx,ny]);let nb=b; if(segInt(p0,p1,tr.gateB.a,tr.gateB.b)) nb=1; const done=nb&&segInt(p0,p1,tr.gateA.a,tr.gateA.b); const k=key(nx,ny,nvx,nvy,nb); if(vis.has(k)) continue; vis.add(k); prev.set(k,[x,y,vx,vy,b]); if(done){goal=[nx,ny,nvx,nvy,nb];Q.length=0;break} Q.push([nx,ny,nvx,nvy,nb])}}
+  if(!goal){info.textContent='Pas de trajectoire trouvée'; state.opt=null; draw(); return}
+  const path=[];let cur=goal;while(cur){path.push([cur[0],cur[1]]);const k=key(...cur);cur=prev.get(k)} path.reverse(); state.opt=path; draw();
+}
+// --- UI & rendering
+function draw(){ctx.clearRect(0,0,cv.width,cv.height);ctx.drawImage(off,0,0);
+  // grid
+  ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--grid')||'#262a56';ctx.lineWidth=1;ctx.beginPath();for(let x=0;x<cv.width;x+=CELL){ctx.moveTo(x,0);ctx.lineTo(x,cv.height)}for(let y=0;y<cv.height;y+=CELL){ctx.moveTo(0,y);ctx.lineTo(cv.width,y)}ctx.stroke();
+  // gates
+  const A=state.track.gateA,B=state.track.gateB;ctx.lineWidth=4;ctx.strokeStyle='#39baff';ctx.beginPath();ctx.moveTo(A.a.x,A.a.y);ctx.lineTo(A.b.x,A.b.y);ctx.stroke();ctx.strokeStyle='#ffd173';ctx.beginPath();ctx.moveTo(B.a.x,B.a.y);ctx.lineTo(B.b.x,B.b.y);ctx.stroke();
+  // players
+  state.players.forEach(p=>{ctx.strokeStyle=p.color;ctx.lineWidth=2;ctx.beginPath();const first=toPx(p.trail[0]);ctx.moveTo(first.x,first.y);for(const t of p.trail.slice(1)){const pp=toPx(t);ctx.lineTo(pp.x,pp.y)}ctx.stroke();const cur=toPx(p.pos);ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(cur.x,cur.y,4,0,TAU);ctx.fill();});
+  // candidates
+  const pl=state.players[state.turn];const [px,py]=pl.pos,[vx,vy]=pl.vel;const C=state.cands;ctx.lineWidth=1;C.forEach(c=>{const np=[px+vx+c.ax,py+vy+c.ay];const p=toPx(np);ctx.fillStyle=c.ok?'#6cf66c':'#ff6b6b';ctx.globalAlpha=c.ok?0.95:0.35;ctx.beginPath();ctx.arc(p.x,p.y,3.5,0,TAU);ctx.fill();ctx.globalAlpha=1});
+  // optimal
+  if(state.opt){ctx.strokeStyle='#ff9fd9';ctx.setLineDash([6,6]);ctx.lineWidth=2;ctx.beginPath();const p0=toPx(state.opt[0]);ctx.moveTo(p0.x,p0.y);for(const t of state.opt.slice(1)){const pp=toPx(t);ctx.lineTo(pp.x,pp.y)}ctx.stroke();ctx.setLineDash([])}
+  info.textContent=`Tour de ${state.players[state.turn].name} — v=(${vx},${vy})`;
+}
+cv.addEventListener('click',e=>{const pl=state.players[state.turn];const [vx,vy]=pl.vel;const r=cv.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;let best=null,bd=1e9;state.cands.forEach(c=>{const np=toPx([pl.pos[0]+vx+c.ax,pl.pos[1]+vy+c.ay]);const d=(np.x-mx)**2+(np.y-my)**2;if(d<bd){bd=d;best=c}}); if(best&&best.ok) applyAccel(best.ax,best.ay)});
+window.addEventListener('keydown',e=>{const map={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1],'z':[0,-1],'q':[-1,0],'s':[0,1],'d':[1,0],'w':[0,-1],'a':[-1,0],'x':[0,1]}; if(e.key==='Enter'){const best=state.cands.find(c=>c.ax===state.hover[0]&&c.ay===state.hover[1]&&c.ok); if(best) applyAccel(best.ax,best.ay)} else if(map[e.key]){state.hover=map[e.key];draw()}});
+// Controls
+$('regen').onclick=()=>{newGame()}; $('restart').onclick=()=>{state&&newGame()}; $('solve').onclick=()=>solveOptimal(); $('clearOpt').onclick=()=>{state.opt=null; draw()};
+$('players').addEventListener('input',e=>initNames(+e.target.value)); ['cell','width','vmax'].forEach(id=>$(id).addEventListener('change',()=>newGame()));
+initNames(+$('players').value); newGame();
 </script>
 </body>
 </html>
