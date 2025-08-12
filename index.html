@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VectorTrack — Vector Racing</title>
+<style>
+  :root{
+    --bg:#0f1126;--panel:#181a3a;--accent:#6cf;--accent2:#ff7cc8;--ok:#72f1b8;--warn:#ffd173;--err:#ff6b6b;
+    --track:#20244d;--lane:#3a3f7a;--grid:#262a56;--text:#e6e6ff
+  }
+  html,body{height:100%;margin:0;background:radial-gradient(1200px 700px at 70% -10%, #26317a22, transparent),
+             radial-gradient(1100px 500px at 0% 120%, #26d9ff18, transparent),
+             var(--bg);color:var(--text);font:14px/1.4 system-ui,Segoe UI,Roboto,Inter,Arial}
+  .wrap{display:grid;grid-template-columns:340px 1fr;gap:14px;max-width:1400px;margin:14px auto;padding:0 10px}
+  .panel{background:linear-gradient(180deg,#1a1d3e,#141637);border:1px solid #2a2e66;border-radius:14px;box-shadow:0 10px 30px #0006;padding:14px;position:sticky;top:10px;height:calc(100vh - 40px);overflow:auto}
+  h1{font-size:20px;margin:0 0 8px;letter-spacing:.5px}
+  h2{font-size:14px;margin:18px 0 6px;color:#b9c3ff;text-transform:uppercase}
+  .controls label{display:block;margin:6px 0}
+  .controls input[type=number]{width:80px;background:#0f1230;border:1px solid #2a2e66;border-radius:6px;color:var(--text);padding:6px}
+  .controls input[type=text]{width:150px;background:#0f1230;border:1px solid #2a2e66;border-radius:6px;color:var(--text);padding:6px}
+  .controls button{background:linear-gradient(180deg,#39baff,#2388ff);color:#001428;border:none;border-bottom:2px solid #0e3a88;border-radius:10px;padding:9px 12px;margin:6px 4px;cursor:pointer;font-weight:700}
+  .controls button.alt{background:linear-gradient(180deg,#ff9fd9,#ff5ab3);border-bottom-color:#a02866;color:#2b0020}
+  .controls button.ghost{background:#14183b;border:1px solid #2a2e66;color:#cfe3ff}
+  .legend{display:flex;gap:8px;flex-wrap:wrap}
+  .tag{padding:3px 8px;border-radius:999px;border:1px solid #2a2e66;background:#121640}
+  .hint{color:#a9b4ff}
+  canvas{width:100%;height:calc(100vh - 40px);background:linear-gradient(180deg,#0b0d21,#0a0c1c);border:1px solid #2a2e66;border-radius:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel">
+    <h1>VectorTrack</h1>
+    <div class="legend">
+      <span class="tag">Tournez par clic sur une des 9 options</span>
+      <span class="tag">Accélération: Δvx,Δvy ∈ {-1,0,1}</span>
+      <span class="tag">Objectif: 1 tour</span>
+    </div>
+    <h2>Paramètres</h2>
+    <div class="controls">
+      <label>Joueurs (2–4): <input id="players" type="number" min="2" max="4" value="2"/></label>
+      <div id="names"></div>
+      <label>Résolution grille: <input id="cell" type="number" min="6" max="14" value="9"/> px/case</label>
+      <label>Largeur piste: <input id="width" type="number" min="10" max="40" value="24"/> px</label>
+      <label>Vitesse max: <input id="vmax" type="number" min="3" max="7" value="5"/></label>
+      <div>
+        <button id="regen">Nouveau circuit</button>
+        <button id="restart" class="ghost">Recommencer</button>
+      </div>
+      <div>
+        <button id="solve" class="alt">Trajectoire optimale</button>
+        <button id="clearOpt" class="ghost">Cacher</button>
+      </div>
+      <h2>Infos</h2>
+      <div id="info" class="hint"></div>
+      <h2>Raccourcis</h2>
+      <div class="hint">ZQSD / WASD pour déplacer le curseur de choix, Entrée pour valider</div>
+    </div>
+  </div>
+  <canvas id="cv" width="1200" height="800"></canvas>
+</div>
+<script>
+const rnd=(a=1)=>Math.random()*a;const TAU=Math.PI*2
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d')
+const off=document.createElement('canvas'), octx=off.getContext('2d')
+let CELL=9, TRACK_W=24, VMAX=5
+const COLORS=['#72f1b8','#6cf','#ff7cc8','#ffd173']
+let state
+function initNames(n){const names=document.getElementById('names');names.innerHTML='';for(let i=0;i<n;i++){const el=document.createElement('label');el.innerHTML=`Joueur ${i+1}: <input type="text" value="J${i+1}" data-i="${i}">`;names.appendChild(el)}names.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',()=>{if(state) state.players[inp.dataset.i|0].name=inp.value}))}
+function polyCircle(n=240,base=270,wobble=60){const pts=[];let a1=rnd(TAU),a2=rnd(TAU),a3=rnd(TAU)
+  for(let i=0;i<n;i++){const t=i/n,ang=t*TAU
+    const r=base + wobble*(.45*Math.sin(3*ang+a1)+.28*Math.sin(5*ang+a2)+.18*Math.sin(7*ang+a3))
+    pts.push({x:cv.width/2 + r*Math.cos(ang), y:cv.height/2 + r*Math.sin(ang)})}
+  // smooth
+  for(let k=0;k<2;k++) for(let i=0;i<n;i++){const p=pts[i], p1=pts[(i+1)%n], p_1=pts[(i-1+n)%n];p.x=(p_.1?.x:0);}
+}
+</script>
+</body>
+</html>
+
